@@ -20,6 +20,7 @@ type apiHandler struct{}
 type apiConfig struct {
 	DB        *database.Queries
 	jwtSecret string
+	jwtIssuer string
 }
 
 type User struct {
@@ -123,7 +124,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 		expiresIn := time.Hour // default 1 hour
 
-		accessToken, err := auth.MakeJWT(getUser.ID, cfg.jwtSecret, expiresIn)
+		accessToken, err := auth.MakeJWT(getUser.ID, cfg.jwtSecret, cfg.jwtIssuer, expiresIn)
 		if err != nil {
 			writeJSONError(w, "Error creating token", http.StatusInternalServerError)
 			return
@@ -192,6 +193,7 @@ func main() {
 	apiCfg := &apiConfig{
 		DB:        dbQueries,
 		jwtSecret: os.Getenv("JWT_SECRET"),
+		jwtIssuer: os.Getenv("JWT_ISSUER"),
 	}
 
 	mux := http.NewServeMux()
@@ -262,7 +264,7 @@ func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Issue a new access token
-		newAccessToken, err := auth.MakeJWT(user.ID, cfg.jwtSecret, time.Hour)
+		newAccessToken, err := auth.MakeJWT(user.ID, cfg.jwtSecret, cfg.jwtIssuer, time.Hour)
 		if err != nil {
 			writeJSONError(w, "Error creating new token", http.StatusInternalServerError)
 			return
