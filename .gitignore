@@ -1,3 +1,5 @@
 .env
 auth_test.go
 database.json
+myserver
+index.html
