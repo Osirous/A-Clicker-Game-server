@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -75,7 +74,7 @@ func (cfg *apiConfig) saveHandler(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
-		w.Write(save.Savedata)
+		w.Write([]byte(save.Savedata))
 
 	case http.MethodPut:
 
@@ -116,34 +115,30 @@ func (cfg *apiConfig) saveHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		data, err := base64.StdEncoding.DecodeString(req.Savedata)
-		if err != nil {
-			writeJSONError(w, "Invalid base64 data", http.StatusBadRequest)
-			return
-		}
-
 		saveParams := database.UpdateSaveDataParams{
 			ID:       saveID,
-			Savedata: data,
+			Savedata: req.Savedata,
 			UserID:   userID,
 		}
 
-		save, err := cfg.DB.UpdateSaveData(r.Context(), saveParams)
+		_, err = cfg.DB.UpdateSaveData(r.Context(), saveParams)
 		if err != nil {
 			writeJSONError(w, "Failed to save user data", http.StatusInternalServerError)
 			return
 		}
 
-		updateSave := Save{
-			ID:        save.ID,
-			CreatedAt: save.CreatedAt,
-			UpdatedAt: save.UpdatedAt,
-			UserID:    userID,
+		updatedSave, err := cfg.DB.GetSaveData(r.Context(), saveID)
+		if err == nil {
+			log.Printf("After save, DB has: %s", string(updatedSave.Savedata))
 		}
+
+		//		log.Printf("UpdateSaveDataParams: ID=%v UserID=%v [First 100]: %s", saveID, userID, string(data)[:100])
+		//		log.Printf("Saving save_id: %s for user_id: %s", saveID.String(), userID.String())
+		//		log.Printf("Uploading data: %s", base64.StdEncoding.EncodeToString(data)[:100]) // first 100 chars
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(updateSave)
+		json.NewEncoder(w).Encode(updatedSave)
 
 	case http.MethodPost:
 
@@ -176,14 +171,9 @@ func (cfg *apiConfig) saveHandler(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, "Missing savedata", http.StatusBadRequest)
 			return
 		}
-		data, err := base64.StdEncoding.DecodeString(req.Savedata)
-		if err != nil {
-			writeJSONError(w, "Invalid base64 data", http.StatusBadRequest)
-			return
-		}
 
 		saveParams := database.CreateSaveDataParams{
-			Savedata: data,
+			Savedata: req.Savedata,
 			UserID:   userID,
 		}
 		save, err := cfg.DB.CreateSaveData(r.Context(), saveParams)

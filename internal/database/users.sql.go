@@ -22,7 +22,7 @@ RETURNING id, created_at, updated_at, savedata, user_id
 `
 
 type CreateSaveDataParams struct {
-	Savedata []byte
+	Savedata string
 	UserID   uuid.UUID
 }
 
@@ -250,7 +250,7 @@ RETURNING id, created_at, updated_at, savedata, user_id
 
 type UpdateSaveDataParams struct {
 	ID       uuid.UUID
-	Savedata []byte
+	Savedata string
 	UserID   uuid.UUID
 }
 

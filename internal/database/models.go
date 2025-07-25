@@ -24,7 +24,7 @@ type Savedatum struct {
 	ID        uuid.UUID
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	Savedata  []byte
+	Savedata  string
 	UserID    uuid.UUID
 }
 
