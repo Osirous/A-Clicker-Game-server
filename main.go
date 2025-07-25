@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -31,6 +32,19 @@ type User struct {
 	HashedPassword string    `json:"-"` // - means do not include this field in client JSON responses.
 	Token          string    `json:"token"`
 	RefreshToken   string    `json:"refresh_token"`
+	SaveID         uuid.UUID `json:"save_id"`
+}
+
+type SaveDataRequest struct {
+	Savedata string `json:"savedata"`
+}
+
+type Save struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Savedata  string    `json:"savedata"`
+	UserID    uuid.UUID `json:"user_id"`
 }
 
 func (apiHandler) ServeHTTP(http.ResponseWriter, *http.Request) {}
@@ -39,6 +53,160 @@ func writeJSONError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
+func (cfg *apiConfig) saveHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+
+	case http.MethodGet:
+
+		saveIDStr := r.PathValue("saveID")
+		saveID, err := uuid.Parse(saveIDStr)
+		if err != nil {
+			writeJSONError(w, "Invalid UUID format", http.StatusBadRequest)
+			return
+		}
+
+		save, err := cfg.DB.GetSaveData(r.Context(), saveID)
+		if err != nil {
+			writeJSONError(w, "Save not found!", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		w.Write(save.Savedata)
+
+	case http.MethodPut:
+
+		saveIDStr := r.PathValue("saveID")
+		saveID, err := uuid.Parse(saveIDStr)
+		if err != nil {
+			writeJSONError(w, "Invalid UUID format", http.StatusBadRequest)
+			return
+		}
+
+		token, err := auth.GetBearerToken(r.Header)
+		if err != nil {
+			log.Printf("Unauthorized access: %s", err)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		userID, err := auth.ValidateJWT(token, cfg.jwtSecret, cfg.jwtIssuer)
+		if err != nil {
+			log.Printf("Unauthorized access: %s", err)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		if r.Header.Get("Content-Type") != "application/json" {
+			writeJSONError(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+			return
+		}
+
+		var req SaveDataRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSONError(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		if req.Savedata == "" {
+			writeJSONError(w, "Missing savedata", http.StatusBadRequest)
+			return
+		}
+
+		data, err := base64.StdEncoding.DecodeString(req.Savedata)
+		if err != nil {
+			writeJSONError(w, "Invalid base64 data", http.StatusBadRequest)
+			return
+		}
+
+		saveParams := database.UpdateSaveDataParams{
+			ID:       saveID,
+			Savedata: data,
+			UserID:   userID,
+		}
+
+		save, err := cfg.DB.UpdateSaveData(r.Context(), saveParams)
+		if err != nil {
+			writeJSONError(w, "Failed to save user data", http.StatusInternalServerError)
+			return
+		}
+
+		updateSave := Save{
+			ID:        save.ID,
+			CreatedAt: save.CreatedAt,
+			UpdatedAt: save.UpdatedAt,
+			UserID:    userID,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(updateSave)
+
+	case http.MethodPost:
+
+		token, err := auth.GetBearerToken(r.Header)
+		if err != nil {
+			log.Printf("Unauthorized access: %s", err)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		userID, err := auth.ValidateJWT(token, cfg.jwtSecret, cfg.jwtIssuer)
+		if err != nil {
+			log.Printf("Unauthorized access: %s", err)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		if r.Header.Get("Content-Type") != "application/json" {
+			writeJSONError(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+			return
+		}
+
+		// Decode JSON input to get base64-encoded savedata
+		var req SaveDataRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSONError(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if req.Savedata == "" {
+			writeJSONError(w, "Missing savedata", http.StatusBadRequest)
+			return
+		}
+		data, err := base64.StdEncoding.DecodeString(req.Savedata)
+		if err != nil {
+			writeJSONError(w, "Invalid base64 data", http.StatusBadRequest)
+			return
+		}
+
+		saveParams := database.CreateSaveDataParams{
+			Savedata: data,
+			UserID:   userID,
+		}
+		save, err := cfg.DB.CreateSaveData(r.Context(), saveParams)
+		if err != nil {
+			writeJSONError(w, "Failed to save user data", http.StatusInternalServerError)
+			return
+		}
+
+		newSave := Save{
+			ID:        save.ID,
+			CreatedAt: save.CreatedAt,
+			UpdatedAt: save.UpdatedAt,
+			UserID:    userID,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(newSave)
+
+	default:
+		writeJSONError(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
 }
 
 func (cfg *apiConfig) userHandler(w http.ResponseWriter, r *http.Request) {
@@ -150,6 +318,22 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		getSaveID, err := cfg.DB.GetSaveDataByUserID(r.Context(), getUser.ID)
+		var saveID uuid.UUID
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				// User has no save, that's okay! They are new!
+				// Set saveID to default zero value
+				saveID = uuid.Nil
+			} else {
+				writeJSONError(w, "Error getting save id", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			saveID = getSaveID.ID
+		}
+
 		response := User{
 			ID:           getUser.ID,
 			CreatedAt:    getUser.CreatedAt,
@@ -157,6 +341,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 			Username:     getUser.Username,
 			Token:        accessToken,
 			RefreshToken: storedRefreshToken.Token,
+			SaveID:       saveID,
 		}
 
 		data, err := json.Marshal(response)
@@ -202,6 +387,8 @@ func main() {
 	mux.HandleFunc("/api/login", apiCfg.loginHandler)
 	mux.HandleFunc("/api/refresh", apiCfg.refreshHandler)
 	mux.HandleFunc("/api/revoke", apiCfg.revokedHandler)
+	mux.HandleFunc("/api/savedata/{saveID}", apiCfg.saveHandler) // Handle POST (Create)
+	mux.HandleFunc("/api/savedata", apiCfg.saveHandler)          // Handle GET, PUT (by id)
 
 	srv := &http.Server{
 		Addr:    ":8080",

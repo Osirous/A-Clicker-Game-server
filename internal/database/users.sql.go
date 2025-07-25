@@ -13,6 +13,32 @@ import (
 	"github.com/google/uuid"
 )
 
+const createSaveData = `-- name: CreateSaveData :one
+INSERT INTO savedata (id, created_at, updated_at, savedata, user_id)
+VALUES (
+    gen_random_uuid(), NOW(), NOW(), $1, $2
+)
+RETURNING id, created_at, updated_at, savedata, user_id
+`
+
+type CreateSaveDataParams struct {
+	Savedata []byte
+	UserID   uuid.UUID
+}
+
+func (q *Queries) CreateSaveData(ctx context.Context, arg CreateSaveDataParams) (Savedatum, error) {
+	row := q.db.QueryRowContext(ctx, createSaveData, arg.Savedata, arg.UserID)
+	var i Savedatum
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Savedata,
+		&i.UserID,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, created_at, updated_at, username, hashed_password)
 VALUES (
@@ -76,6 +102,45 @@ func (q *Queries) GetRefreshToken(ctx context.Context, userID uuid.NullUUID) (Ge
 		&i.Token,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.UserID,
+	)
+	return i, err
+}
+
+const getSaveData = `-- name: GetSaveData :one
+SELECT id, created_at, updated_at, savedata, user_id
+FROM savedata
+WHERE id = $1
+`
+
+func (q *Queries) GetSaveData(ctx context.Context, id uuid.UUID) (Savedatum, error) {
+	row := q.db.QueryRowContext(ctx, getSaveData, id)
+	var i Savedatum
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Savedata,
+		&i.UserID,
+	)
+	return i, err
+}
+
+const getSaveDataByUserID = `-- name: GetSaveDataByUserID :one
+SELECT id, created_at, updated_at, savedata, user_id
+FROM savedata
+WHERE user_id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetSaveDataByUserID(ctx context.Context, userID uuid.UUID) (Savedatum, error) {
+	row := q.db.QueryRowContext(ctx, getSaveDataByUserID, userID)
+	var i Savedatum
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Savedata,
 		&i.UserID,
 	)
 	return i, err
@@ -173,6 +238,31 @@ func (q *Queries) StoreRefreshToken(ctx context.Context, arg StoreRefreshTokenPa
 		&i.UpdatedAt,
 		&i.UserID,
 		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const updateSaveData = `-- name: UpdateSaveData :one
+UPDATE savedata SET savedata = $2, updated_at = NOW()
+WHERE id = $1 AND user_id = $3
+RETURNING id, created_at, updated_at, savedata, user_id
+`
+
+type UpdateSaveDataParams struct {
+	ID       uuid.UUID
+	Savedata []byte
+	UserID   uuid.UUID
+}
+
+func (q *Queries) UpdateSaveData(ctx context.Context, arg UpdateSaveDataParams) (Savedatum, error) {
+	row := q.db.QueryRowContext(ctx, updateSaveData, arg.ID, arg.Savedata, arg.UserID)
+	var i Savedatum
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Savedata,
+		&i.UserID,
 	)
 	return i, err
 }

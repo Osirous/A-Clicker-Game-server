@@ -20,6 +20,14 @@ type RefreshToken struct {
 	RevokedAt sql.NullTime
 }
 
+type Savedatum struct {
+	ID        uuid.UUID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Savedata  []byte
+	UserID    uuid.UUID
+}
+
 type User struct {
 	ID             uuid.UUID
 	CreatedAt      time.Time
