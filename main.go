@@ -128,13 +128,9 @@ func (cfg *apiConfig) saveHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		updatedSave, err := cfg.DB.GetSaveData(r.Context(), saveID)
-		if err == nil {
-			log.Printf("After save, DB has: %s", string(updatedSave.Savedata))
+		if err != nil {
+			writeJSONError(w, "Failed to get user data", http.StatusInternalServerError)
 		}
-
-		//		log.Printf("UpdateSaveDataParams: ID=%v UserID=%v [First 100]: %s", saveID, userID, string(data)[:100])
-		//		log.Printf("Saving save_id: %s for user_id: %s", saveID.String(), userID.String())
-		//		log.Printf("Uploading data: %s", base64.StdEncoding.EncodeToString(data)[:100]) // first 100 chars
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
