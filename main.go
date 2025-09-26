@@ -15,7 +15,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-type apiHandler struct{}
+//type apiHandler struct{}
 
 type apiConfig struct {
 	DB        *database.Queries
@@ -46,7 +46,7 @@ type Save struct {
 	UserID    uuid.UUID `json:"user_id"`
 }
 
-func (apiHandler) ServeHTTP(http.ResponseWriter, *http.Request) {}
+//func (apiHandler) ServeHTTP(http.ResponseWriter, *http.Request) {}
 
 func writeJSONError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -368,7 +368,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/api/", apiHandler{})
+	//mux.Handle("/api/", apiHandler{})
 	mux.HandleFunc("/api/users", apiCfg.userHandler)
 	mux.HandleFunc("/api/login", apiCfg.loginHandler)
 	mux.HandleFunc("/api/refresh", apiCfg.refreshHandler)
